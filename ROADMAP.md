@@ -515,6 +515,8 @@ off the list when it has been.
 - A recheck starts only from a real fix of 30 m or better with no off-route hits, and lands only
   when that fix is on the result (a recheck from a dead-reckoned point swapped in a route 185 m
   behind the car): a unit test of the two rules. Not driven.
+- A recheck's heal no longer starts the reroute cooldown (it held a needed reroute 8 s): code
+  only. Not driven.
 
 ### Open from the October 2026 audit
 

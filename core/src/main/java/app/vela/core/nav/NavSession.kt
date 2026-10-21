@@ -909,7 +909,9 @@ class NavSession @Inject constructor(
                     passedStops = 0
                     planRoute = candidate
                 }
-                lastRerouteAdoptMs = SystemClock.elapsedRealtime()
+                // A heal does not start the reroute cooldown: it lands only on a line the car is
+                // on, so a deviation right after it is real. It held a needed reroute back 8 s on
+                // a real drive.
                 etaScale = 1.0
                 _state.update {
                     it.copy(

@@ -1647,7 +1647,7 @@ At 12 m a car gets 42 m and 84 m. `OFF_ROUTE_M` (40 m) and `FAR_OFF_M` (90 m) ar
 #### Rerouting
 
 ```
-REROUTE_COOLDOWN_MS         10_000   minimum gap between adopted reroutes
+REROUTE_COOLDOWN_MS         10_000   minimum gap between adopted reroutes (a recheck's heal does not count)
 REROUTE_FETCH_TIMEOUT_MS    20_000   an urgent attempt's deadline
 REROUTE_LADDER_TIMEOUT_MS   40_000   an escalated attempt's deadline
 REROUTE_ESCALATE_AFTER           2   failed urgent attempts before the full ladder
