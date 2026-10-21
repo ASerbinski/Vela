@@ -4022,11 +4022,19 @@ A version query on `BAKED_URL` moves the map cache off old tiles after a rebake.
   or more, moved on to a sharper vertex within `CORNER_NEAR_M` (15 m). A fork's or a ramp's
   split lies past the maneuver point, and a lane change is a jog the chord after it does not
   hold. With no such vertex the stretch ends `AFTER_M` past the point. Each arm is simplified
-  (Douglas-Peucker, `SIMPLIFY_M` 5 m), the corner kept, and the arrowhead aims along the chord
-  over the last `HEAD_CHORD_M` (12 m).
+  (Douglas-Peucker, `SIMPLIFY_M` 1.5 m, well inside the stripe's half width; at 5 m a curve's
+  chord ran up to 4.5 m inside it), the corner kept, and the arrowhead aims along the arrow's
+  own last `HEAD_CHORD_M` (6 m) as drawn.
+- The arrows are cut from the line the map draws (`VelaMapView`'s `routePolyline`, the
+  `drawPolyline` moved to road centers and smoothed), passed as `arrows`'s `line`, not from the
+  guidance line: a Google route is guided on Google's own line, which runs in a lane up to about
+  9 m from the drawn one, and arrows cut from it sat beside the blue line in places. Each
+  maneuver is placed on the drawn line within `DRAWN_WINDOW_M` (120 m) of where the guidance line
+  puts it, scaled by the two lengths, so a U-turn's other carriageway is never taken for it.
 - `TurnArrows` (holder, `turn_arrows_on`, on by default under Settings > Navigation) is written
-  by `NavController` per tick, change-gated on the route and the step like `NavTurnTarget`, and
-  read by `VelaMapView`, so `MapScreen` carries nothing for it. The layers (`vela-turn-arrows-casing`,
+  by `NavController` per tick, change-gated on the route and the step like `NavTurnTarget`; it
+  publishes the route and step (`input`), and `VelaMapView` builds the arrows on its drawn line
+  off the main thread, so `MapScreen` carries nothing for it. The layers (`vela-turn-arrows-casing`,
   `vela-turn-arrows`, `vela-turn-arrows-head`) sit above the topmost `vela-route*` line layer,
   the pieces' pending "-b" copies included, and are seated again when a piece has come in above
   them (the drive's `vela-route-cut-b` hid the bodies on a 4a): a dark casing (10 to 24 px, z14

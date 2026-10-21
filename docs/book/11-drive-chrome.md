@@ -178,10 +178,10 @@ They draw from z15.4, just under the camera's 15.5 floor, above the route line.
 
 Turn arrows (Settings > Navigation, on by default) are short white arrows in a dark casing drawn
 on the route through each turn ahead, 30 m before the maneuver point to 30 m past the corner,
-from z14, the way Google and OsmAnd draw them. The corner is where the line turns, which for a
-fork or a ramp is past the point the route puts the maneuver at, so the arrow runs on through the
-split; a lane change in the line is smoothed out of the arrow, and the head aims along the last
-12 m. A continue, a merge and a roundabout's entry get none; the step you are on and everything
+from z14, the way Google and OsmAnd draw them. They are cut from the line the map draws, so they
+sit on it, and follow a curve within 1.5 m. The corner is where the line turns, which for a fork
+or a ramp is past the point the route puts the maneuver at, so the arrow runs on through the
+split, and the head aims along the arrow's own end. A continue, a merge and a roundabout's entry get none; the step you are on and everything
 after it has one, and a passed turn's arrow goes with the step.
 
 ### The route line during a drive

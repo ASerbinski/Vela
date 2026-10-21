@@ -2454,11 +2454,18 @@ fun VelaMapView(
         val style = styleRef ?: return@LaunchedEffect
         runCatching { ensureShapes(style, savedShapes) }.onFailure { android.util.Log.w("VelaShapes", "shapes: ${it.message}") }
     }
-    // Turn arrows on the route at the turns ahead (issue #804), during a drive alone.
-    val turnArrows = app.vela.ui.TurnArrows.arrows.value
-    LaunchedEffect(turnArrows, navMode, styleRef) {
+    // Turn arrows on the route at the turns ahead (issue #804), during a drive alone. Cut from the
+    // line drawn here (routePolyline), not the guidance line, which can run meters to one side of
+    // it; off the main thread, since the drawn line is the long, smoothed one.
+    val turnArrowsFor = app.vela.ui.TurnArrows.input.value
+    LaunchedEffect(turnArrowsFor, routePolyline, navMode, styleRef) {
         val style = styleRef ?: return@LaunchedEffect
-        runCatching { ensureTurnArrows(style, if (navMode) turnArrows else emptyList()) }.onFailure { android.util.Log.w("VelaTurnArrows", "arrows: ${it.message}") }
+        val f = turnArrowsFor
+        val arrows = if (!navMode || f == null) emptyList() else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching { app.vela.core.nav.TurnArrowGeometry.arrows(f.route, f.step, routePolyline.takeIf { it.size >= 2 } ?: f.route.polyline) }
+                .getOrDefault(emptyList())
+        }
+        runCatching { ensureTurnArrows(style, arrows) }.onFailure { android.util.Log.w("VelaTurnArrows", "arrows: ${it.message}") }
     }
     LaunchedEffect(shapeDraft, drawDots, styleRef) {
         val style = styleRef ?: return@LaunchedEffect
