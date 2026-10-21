@@ -509,6 +509,9 @@ off the list when it has been.
 - One turn split in two by a mapped turn lane is said as one turn (a real drive heard two
   slight rights for one right at a divided corner): a unit test, the drive's own route (folded),
   and the 39 stored lines (three other folds, each a turn lane on the map). Not heard on a drive.
+- The heading term and a reroute's pinned heading need 5 m/s and a 30 m fix when driving (a
+  real drive downtown rerouted three times from GPS drift at a light): a unit test, and a replay
+  of that drive's fixes on its first route reroutes at 52 s before and never after. Not driven.
 
 ### Open from the October 2026 audit
 

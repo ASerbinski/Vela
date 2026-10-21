@@ -57,6 +57,13 @@ object NavEngine {
                                               // engine kept guiding on the OLD route with no reroute and no
                                               // redrawn line (device report 2026-07-16). The same 3-hit
                                               // debounce absorbs turn transients and lane changes.
+    /** The heading term needs this speed when driving ([update]'s headingMinMps): a GPS course
+     *  under it is mostly noise. A car pulling away from a light between tall buildings was read
+     *  crawling backward along its own route at 2.7 to 3.9 m/s for three fixes, right on the
+     *  line, and the route was dropped for one that sent it the other way. */
+    const val HEADING_MIN_MPS = 5.0
+    /** A fix the phone rates worse than this says nothing about the course (NavSession). */
+    const val HEADING_MAX_ACC_M = 30.0
 
     /**
      * Accuracy-scaled off-route corridor, in meters, for a travel mode. Real navigators (OsmAnd,
@@ -265,6 +272,9 @@ object NavEngine {
         // The next stop on a drive with stops (NavSession), so the voice says it is coming the
         // way it says the destination is. Null = no stop cues, everything else unchanged.
         stop: StopAhead? = null,
+        // The speed the heading term needs, MODE-AWARE (NavSession passes it): [HEADING_MIN_MPS]
+        // driving; a walker or cyclist keeps the moving floor.
+        headingMinMps: Double = HEADING_MIN_MPS,
     ): Pair<NavState, List<NavEvent>> {
         val events = mutableListOf<NavEvent>()
         val maneuvers = route.maneuvers
@@ -347,7 +357,7 @@ object NavEngine {
         // carried on with its turns, no reroute, no redrawn line. Turn transients and lane changes
         // are absorbed by the same OFF_ROUTE_HITS debounce; a legit route turn flips the snapped
         // segment's bearing along with the driver's, so it doesn't accumulate hits.
-        val headingOff = moving && bearingDeg != null &&
+        val headingOff = moving && (speedMps ?: 99.0) >= headingMinMps && bearingDeg != null &&
             routeBearingAt(route.polyline, cum, traveled)?.let { rb ->
                 kotlin.math.abs(((bearingDeg - rb + 540.0) % 360.0) - 180.0) > HEADING_OFF_DEG
             } == true

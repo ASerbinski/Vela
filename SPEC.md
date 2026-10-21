@@ -1502,7 +1502,11 @@ At 12 m a car gets 42 m and 84 m. `OFF_ROUTE_M` (40 m) and `FAR_OFF_M` (90 m) ar
 - A moving fix beyond the far distance is two hits.
 - A moving fix whose course is more than `HEADING_OFF_DEG` (60) off the route's local bearing is
   a hit even inside the corridor, and two when it is also a quarter-corridor off the line. It
-  never counts toward the on-route streak.
+  never counts toward the on-route streak. Driving, the course counts only from
+  `HEADING_MIN_MPS` (5 m/s) and from a fix rated `HEADING_MAX_ACC_M` (30 m) or better
+  (`headingMinMps`; walking and cycling keep their moving floor). A car pulling away from a
+  light between tall buildings was read crawling backward along its own route at 2.7 to
+  3.9 m/s for three fixes, on the line, and was rerouted three times in 50 s.
 - No reroute fires while both the route left and the straight-line distance to the destination
   are under `DEST_ZONE_M` (150 m). The request is held until the car leaves that zone.
 - Turn prompts are muted while off route.
@@ -1687,7 +1691,9 @@ LADDER_SNAP_RESERVE_MS       6_000   an escalated fetch stops waiting for Google
   Google's routes are tagged `GOOGLE_ABBREVIATED`.
 - A reroute pins its departure heading. OSRM gets `bearings=<heading>,65` for the first
   waypoint and an empty entry for every later one; the count must match the coordinates or the
-  request is rejected. Planning fetches and stationary fixes send none.
+  request is rejected. Planning fetches and stationary fixes send none, and neither does a fix
+  under the heading term's speed or accuracy (`NavSession.departCourse`), so a reroute from a
+  crawl is not told the car points the way GPS drift says.
 - Google's request carries no heading. On a fetch that has one, a Google route whose first 80 m
   run more than 120 degrees off it (`RouteGeometry.startsAgainst`) is set aside when the open
   router answered, so the hybrid cannot tell a moving car to turn around. `forwardChoice`

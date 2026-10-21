@@ -446,7 +446,7 @@ class NavSession @Inject constructor(
         // the engine is what makes the hold total - events are what speak, reroute, count stops
         // and arrive, and they are all downstream of this call.
         lastLoc = loc
-        lastBearing = bearingDeg
+        lastBearing = departCourse(bearingDeg, speedMps, accuracyM)
         if (s.paused) {
             // Whatever is driven during the hold was driven: the first fix after it is not a jump.
             synchronized(stopLock) { progressRoute = null }
@@ -476,7 +476,11 @@ class NavSession @Inject constructor(
         // The stop the drive is heading for, so the engine can say it is coming. Only while the
         // marks were measured on this very route (planRoute).
         val stopAhead = synchronized(stopLock) { if (route === planRoute) stopAheadFor(route, nav.traveledM) else null }
-        val (next, events) = NavEngine.update(route, nav, loc, imperial, speedMps, movingFloor, offRoute, farOff, bearingDeg, stopAhead)
+        // The course counts against the route only from a fix that can tell it (NavEngine.HEADING_*),
+        // and a reroute pins its departure to it only then ([departCourse]).
+        val course = bearingDeg.takeIf { accuracyM == null || accuracyM <= NavEngine.HEADING_MAX_ACC_M }
+        val departCourse = lastBearing
+        val (next, events) = NavEngine.update(route, nav, loc, imperial, speedMps, movingFloor, offRoute, farOff, course, stopAhead, headingMinMps())
         val maneuver = route.maneuvers.getOrNull(next.stepIndex)
         // The figures to the next stop, measured on this fix's progress. Only while the marks were
         // measured on this very route (planRoute): against another route they mean nothing.
@@ -531,7 +535,7 @@ class NavSession @Inject constructor(
         }
         if (skipped) {
             if (!skipNoted) { note("progress jumped past a stop, not counting it: rerouting through the stops"); skipNoted = true }
-            if (!replayMode) reroute(loc, bearingDeg) // replays play recorded swaps back instead
+            if (!replayMode) reroute(loc, departCourse) // replays play recorded swaps back instead
         }
         val interrupting = events.any { it is NavEvent.Speak && it.interrupt }
         if (!skipped) {
@@ -554,8 +558,8 @@ class NavSession @Inject constructor(
                     }
                 }
                 NavEvent.RerouteNeeded -> {
-                    diag.record("nav", "off-route → rerouting from ${loc.lat},${loc.lng} heading ${bearingDeg?.toInt()}"); onNote?.invoke("off-route -> rerouting, heading ${bearingDeg?.toInt()}")
-                    reroute(loc, bearingDeg)
+                    diag.record("nav", "off-route → rerouting from ${loc.lat},${loc.lng} heading ${departCourse?.toInt()}"); onNote?.invoke("off-route -> rerouting, heading ${departCourse?.toInt() ?: "not pinned"}")
+                    reroute(loc, departCourse)
                 }
             }
         }
@@ -979,6 +983,23 @@ class NavSession @Inject constructor(
             )
         }
     }
+
+    /** The speed the engine's heading term needs in this mode: [NavEngine.HEADING_MIN_MPS] driving,
+     *  the moving floor walking or cycling. */
+    private fun headingMinMps(): Double = when (mode) {
+        TravelMode.WALK -> 0.6
+        TravelMode.BICYCLE -> 1.0
+        else -> NavEngine.HEADING_MIN_MPS
+    }
+
+    /** [bearingDeg] when the fix can tell the way the car points, else null: a reroute pins its
+     *  departure to it. From a crawl or a poor fix the GPS course is noise, and a reroute that took
+     *  it as the way the car pointed began with a turn to the wrong side, from a standstill at a
+     *  light. Kept as [lastBearing] for a reroute on resume. */
+    private fun departCourse(bearingDeg: Double?, speedMps: Double?, accuracyM: Double?): Double? =
+        bearingDeg.takeIf {
+            (accuracyM == null || accuracyM <= NavEngine.HEADING_MAX_ACC_M) && (speedMps ?: 99.0) >= headingMinMps()
+        }
 
     private fun reroute(loc: LatLng, headingDeg: Double? = null) {
         if (replayMode) {
