@@ -4034,12 +4034,19 @@ A version query on `BAKED_URL` moves the map cache off old tiles after a rebake.
 - `TurnArrows` (holder, `turn_arrows_on`, on by default under Settings > Navigation) is written
   by `NavController` per tick, change-gated on the route and the step like `NavTurnTarget`; it
   publishes the route and step (`input`), and `VelaMapView` builds the arrows on its drawn line
-  off the main thread, so `MapScreen` carries nothing for it. The layers (`vela-turn-arrows-casing`,
-  `vela-turn-arrows`, `vela-turn-arrows-head`) sit above the topmost `vela-route*` line layer,
-  the pieces' pending "-b" copies included, and are seated again when a piece has come in above
-  them (the drive's `vela-route-cut-b` hid the bodies on a 4a): a dark casing (10 to 24 px, z14
-  to z18), a white body (5 to 14 px) and a white arrowhead image rotated to the end bearing,
-  from z14. Empty outside a drive.
+  off the main thread, so `MapScreen` carries nothing for it. The layers sit above the topmost
+  `vela-route*` line layer, the pieces' pending "-b" copies included, and are seated again when a
+  piece has come in above them (the drive's `vela-route-cut-b` hid the bodies on a 4a), from
+  z14, in this order: `vela-turn-arrows-casing`, `vela-turn-arrows-head-casing`,
+  `vela-turn-arrows`, `vela-turn-arrows-head`. The arrow sits inside the stripe, as Google's
+  does: its dark edge (`TURN_ARROW_EDGE`, an opaque dark indigo) spans `TURN_ARROW_CASING_OF_ROUTE`
+  (0.72) of the stripe's width at every zoom and its white `TURN_ARROW_BODY_OF_ROUTE` (0.54),
+  both from the stripe's own curve (`realWidthCurve`), with round caps and joins. The head is a
+  plain triangle 1.45 shaft widths across with a 74 degree tip and corners rounded 1.5 dp, built
+  in dp with the screen's density (`turnArrowHeadBitmap`) and sized by zoom to the shaft
+  (`turnArrowHeadSize`); its dark edge is drawn under the white shaft and its white over it, and
+  its base sits `TURN_ARROW_HEAD_TUCK_DP` (1 dp) behind the shaft's end, so no dark line crosses
+  the joint. Empty outside a drive.
 
 #### Rasters
 

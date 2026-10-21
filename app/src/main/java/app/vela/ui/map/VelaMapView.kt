@@ -7613,19 +7613,50 @@ private fun ensureNavRoadLabels(style: Style, on: Boolean, dark: Boolean, densit
     }
 }
 
-// Turn arrows on the route (issue #804): a short white arrow in a dark casing through each turn
-// ahead, Google's shape. Read from the TurnArrows holder, so MapScreen carries no parameter for it.
+// Turn arrows on the route (issue #804): a short white arrow with a thin dark edge through each
+// turn ahead, inside the blue line, as Google draws it. Read from the TurnArrows holder, so
+// MapScreen carries no parameter for it.
 private const val TURN_ARROW_SRC = "vela-turn-arrows-src"
 private const val TURN_ARROW_CASING_LAYER = "vela-turn-arrows-casing"
 private const val TURN_ARROW_LAYER = "vela-turn-arrows"
+private const val TURN_ARROW_HEAD_CASING_LAYER = "vela-turn-arrows-head-casing"
 private const val TURN_ARROW_HEAD_LAYER = "vela-turn-arrows-head"
-private const val TURN_ARROW_HEAD_IMG = "vela-turn-arrow-head"
+private const val TURN_ARROW_HEAD_CASING_IMG = "vela-turn-arrow-head-casing"
+private const val TURN_ARROW_HEAD_IMG = "vela-turn-arrow-head-fill"
+// The arrow's width as shares of the blue line's at every zoom: its dark edge spans 72% and its
+// white 54%, so it sits inside the stripe with blue showing each side, as Google's does. Before,
+// a fixed 10 to 24 dp curve ran wider than the stripe from about z15 to z17.
+private const val TURN_ARROW_CASING_OF_ROUTE = 0.72
+private const val TURN_ARROW_BODY_OF_ROUTE = 0.54
+private const val TURN_ARROW_EDGE = "#1A1470" // Google's dark indigo edge, on any route color
+// The head at icon size 1, in dp, against a [TURN_ARROW_REF_DP] shaft (its dark edge's width): a
+// plain triangle 1.45 shafts wide with a 74 degree tip and rounded corners, no swept-back barbs.
+private const val TURN_ARROW_REF_DP = 10f
+private const val TURN_ARROW_HEAD_W_DP = 14.5f
+private const val TURN_ARROW_HEAD_TIP_DEG = 74f
+private const val TURN_ARROW_HEAD_ROUND_DP = 1.5f
+private const val TURN_ARROW_HEAD_PAD_DP = 1f
+// The head's base sits this far behind the shaft's end, so the white shaft runs into the head.
+private const val TURN_ARROW_HEAD_TUCK_DP = 1f
+
+private fun turnArrowScaled(f: Double) = FloatArray(ROUTE_BASE_STOPS.size) { i -> if (i % 2 == 1) (ROUTE_BASE_STOPS[i] * f).toFloat() else ROUTE_BASE_STOPS[i] }
+private fun turnArrowCasingWidth() = realWidthCurve(turnArrowScaled(TURN_ARROW_CASING_OF_ROUTE), ROUTE_REAL_M * TURN_ARROW_CASING_OF_ROUTE, ROUTE_CAP_DP * TURN_ARROW_CASING_OF_ROUTE)
+private fun turnArrowBodyWidth() = realWidthCurve(turnArrowScaled(TURN_ARROW_BODY_OF_ROUTE), ROUTE_REAL_M * TURN_ARROW_BODY_OF_ROUTE, ROUTE_CAP_DP * TURN_ARROW_BODY_OF_ROUTE)
+/** The head's icon size by zoom: the shaft's dark width over [TURN_ARROW_REF_DP], so the head keeps its proportions. */
+private fun turnArrowHeadSize(): Expression {
+    val stops = (28..40).map { it / 2.0 }.map { z ->
+        val c = realWidthDp(turnArrowScaled(TURN_ARROW_CASING_OF_ROUTE), ROUTE_REAL_M * TURN_ARROW_CASING_OF_ROUTE, ROUTE_CAP_DP * TURN_ARROW_CASING_OF_ROUTE, z)
+        Expression.stop(z.toFloat(), (c / TURN_ARROW_REF_DP).toFloat())
+    }.toTypedArray()
+    return Expression.interpolate(Expression.linear(), Expression.zoom(), *stops)
+}
 
 private fun ensureTurnArrows(style: Style, arrows: List<app.vela.core.nav.TurnArrowGeometry.Arrow>) {
     if (style.getSource(TURN_ARROW_SRC) == null) {
         if (arrows.isEmpty()) return
         style.addSource(GeoJsonSource(TURN_ARROW_SRC))
-        if (style.getImage(TURN_ARROW_HEAD_IMG) == null) style.addImage(TURN_ARROW_HEAD_IMG, turnArrowHeadBitmap())
+        if (style.getImage(TURN_ARROW_HEAD_IMG) == null) style.addImage(TURN_ARROW_HEAD_IMG, turnArrowHeadBitmap(edge = false))
+        if (style.getImage(TURN_ARROW_HEAD_CASING_IMG) == null) style.addImage(TURN_ARROW_HEAD_CASING_IMG, turnArrowHeadBitmap(edge = true))
     }
     // Seated directly above the topmost route piece, below the labels, and seated AGAIN when a
     // piece has come in above them since: the stretch ahead and the tail arrive with the drive,
@@ -7636,30 +7667,40 @@ private fun ensureTurnArrows(style: Style, arrows: List<app.vela.core.nav.TurnAr
     val routeTop = layers.indexOfLast { it.id.startsWith("vela-route") && it !is SymbolLayer }
     val mine = layers.indexOfFirst { it.id == TURN_ARROW_CASING_LAYER }
     if (mine < 0 || (routeTop >= 0 && mine < routeTop)) {
-        for (id in listOf(TURN_ARROW_HEAD_LAYER, TURN_ARROW_LAYER, TURN_ARROW_CASING_LAYER)) runCatching { style.removeLayer(id) }
-        val zoomed = { lo: Float, hi: Float -> Expression.interpolate(Expression.exponential(1.5f), Expression.zoom(), Expression.stop(14, lo), Expression.stop(18, hi)) }
+        for (id in listOf(TURN_ARROW_HEAD_LAYER, TURN_ARROW_LAYER, TURN_ARROW_HEAD_CASING_LAYER, TURN_ARROW_CASING_LAYER)) runCatching { style.removeLayer(id) }
+        // Round caps: a soft tail, and the shaft's end tucks under the head. Opaque edge: the
+        // shaft's and the head's edges overlap at the joint and must not darken there.
         val casing = LineLayer(TURN_ARROW_CASING_LAYER, TURN_ARROW_SRC).withProperties(
-            PropertyFactory.lineColor("#202124"), PropertyFactory.lineOpacity(0.85f), PropertyFactory.lineWidth(zoomed(10f, 24f)),
-            PropertyFactory.lineCap(Property.LINE_CAP_BUTT), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            PropertyFactory.lineColor(TURN_ARROW_EDGE), PropertyFactory.lineWidth(turnArrowCasingWidth()),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
         ).apply { minZoom = 14f }
         val body = LineLayer(TURN_ARROW_LAYER, TURN_ARROW_SRC).withProperties(
-            PropertyFactory.lineColor("#FFFFFF"), PropertyFactory.lineWidth(zoomed(5f, 14f)),
-            PropertyFactory.lineCap(Property.LINE_CAP_BUTT), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            PropertyFactory.lineColor("#FFFFFF"), PropertyFactory.lineWidth(turnArrowBodyWidth()),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
         ).apply { minZoom = 14f }
-        val head = SymbolLayer(TURN_ARROW_HEAD_LAYER, TURN_ARROW_SRC)
+        val padDp = TURN_ARROW_HEAD_PAD_DP + turnArrowHeadEdgeDp()
+        fun head(id: String, img: String) = SymbolLayer(id, TURN_ARROW_SRC)
             .withFilter(Expression.eq(Expression.get("head"), Expression.literal(true)))
             .withProperties(
-                PropertyFactory.iconImage(TURN_ARROW_HEAD_IMG),
+                PropertyFactory.iconImage(img),
                 PropertyFactory.iconRotate(Expression.get("bearing")),
                 PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
                 PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                // The bitmap's bottom margin, plus the tuck, back along the shaft: the head's base
+                // sits just behind the shaft's end, so the two read as one arrow.
+                PropertyFactory.iconOffset(arrayOf(0f, padDp + TURN_ARROW_HEAD_TUCK_DP)),
                 PropertyFactory.iconAllowOverlap(true), PropertyFactory.iconIgnorePlacement(true),
-                PropertyFactory.iconSize(zoomed(0.7f, 1.6f)),
+                PropertyFactory.iconSize(turnArrowHeadSize()),
             ).apply { minZoom = 14f }
+        val headCasing = head(TURN_ARROW_HEAD_CASING_LAYER, TURN_ARROW_HEAD_CASING_IMG)
+        val headFill = head(TURN_ARROW_HEAD_LAYER, TURN_ARROW_HEAD_IMG)
+        // Edge, head edge, white shaft, white head: the head's edge lies under the white shaft, so
+        // no dark line crosses the joint.
         val above = layers.getOrNull(routeTop)?.id
         if (above != null) {
-            style.addLayerAbove(casing, above); style.addLayerAbove(body, casing.id); style.addLayerAbove(head, body.id)
-        } else { style.addLayer(casing); style.addLayer(body); style.addLayer(head) }
+            style.addLayerAbove(casing, above); style.addLayerAbove(headCasing, casing.id)
+            style.addLayerAbove(body, headCasing.id); style.addLayerAbove(headFill, body.id)
+        } else { style.addLayer(casing); style.addLayer(headCasing); style.addLayer(body); style.addLayer(headFill) }
     }
     val features = arrows.flatMap { a ->
         val line = Feature.fromGeometry(LineString.fromLngLats(a.points.map { Point.fromLngLat(it.lng, it.lat) }))
@@ -7673,14 +7714,38 @@ private fun ensureTurnArrows(style: Style, arrows: List<app.vela.core.nav.TurnAr
     android.util.Log.i("VelaTurnArrows", "set ${arrows.size} arrow(s), seated ${if (mine < 0 || (routeTop >= 0 && mine < routeTop)) "now" else "before"}")
 }
 
-/** The arrowhead: a white triangle in a dark casing, pointing up (north); the layer turns it. */
-private fun turnArrowHeadBitmap(): Bitmap {
-    val w = 56; val h = 44
-    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bmp)
-    val path = Path().apply { moveTo(w / 2f, 2f); lineTo(w - 2f, h - 2f); lineTo(w / 2f, h - 14f); lineTo(2f, h - 2f); close() }
-    canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xD9202124.toInt(); style = Paint.Style.STROKE; strokeWidth = 6f; strokeJoin = Paint.Join.ROUND })
-    canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); style = Paint.Style.FILL })
+/** The head's dark edge at icon size 1, in dp: the shaft's own, half the gap between its dark and white widths. */
+private fun turnArrowHeadEdgeDp(): Float =
+    (TURN_ARROW_REF_DP * (1.0 - TURN_ARROW_BODY_OF_ROUTE / TURN_ARROW_CASING_OF_ROUTE) / 2.0).toFloat()
+
+/**
+ * The arrowhead pointing up (north), the layer turns it: [edge] true is the dark edge drawn under
+ * the white shaft, false the white triangle drawn over it. Built in dp with the screen's density
+ * set on the bitmap, so the head keeps its size against the shaft on every screen.
+ */
+private fun turnArrowHeadBitmap(edge: Boolean): Bitmap {
+    val dm = android.content.res.Resources.getSystem().displayMetrics
+    val d = dm.density
+    val e = turnArrowHeadEdgeDp()
+    val fillW = TURN_ARROW_HEAD_W_DP - 2 * e
+    val fillL = (fillW / 2) / kotlin.math.tan(Math.toRadians(TURN_ARROW_HEAD_TIP_DEG / 2.0)).toFloat()
+    val pad = (TURN_ARROW_HEAD_PAD_DP + e) * d
+    val w = kotlin.math.ceil(fillW * d + 2 * pad).toInt()
+    val h = kotlin.math.ceil(fillL * d + 2 * pad).toInt()
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { density = dm.densityDpi }
+    val cx = w / 2f
+    val base = h - pad
+    // Started mid-base, so the rounding reaches every corner.
+    val path = Path().apply {
+        moveTo(cx, base); lineTo(cx + fillW * d / 2, base); lineTo(cx, base - fillL * d); lineTo(cx - fillW * d / 2, base); close()
+    }
+    Canvas(bmp).drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        pathEffect = android.graphics.CornerPathEffect(TURN_ARROW_HEAD_ROUND_DP * d)
+        if (edge) {
+            color = android.graphics.Color.parseColor(TURN_ARROW_EDGE); style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = 2 * e * d; strokeJoin = Paint.Join.ROUND
+        } else { color = 0xFFFFFFFF.toInt(); style = Paint.Style.FILL }
+    })
     return bmp
 }
 
@@ -8585,12 +8650,16 @@ private fun roadWidthScale(): Double = (app.vela.ui.AppTune.local("roadWidthScal
 /** A line's width by zoom: the wider of [base] (dp stops, exponential 1.5) and [realM] meters at
  *  [roadWidthScale], capped at [capDp], less [minus] (dp) at each zoom. Stops every half level. */
 private fun realWidthCurve(base: FloatArray, realM: Double, capDp: Double, minus: (Double) -> Double = { 0.0 }): Expression {
-    val m = realM * roadWidthScale()
     val stops = (10..40).map { it / 2.0 }.map { z ->
-        val w = maxOf(expInterp(base, z, 1.5), if (m > 0) minOf(capDp, m / (M_PER_DP_Z0 / Math.pow(2.0, z))) else 0.0)
-        Expression.stop(z.toFloat(), (w - minus(z)).coerceAtLeast(0.0).toFloat())
+        Expression.stop(z.toFloat(), (realWidthDp(base, realM, capDp, z) - minus(z)).coerceAtLeast(0.0).toFloat())
     }.toTypedArray()
     return Expression.interpolate(Expression.linear(), Expression.zoom(), *stops)
+}
+
+/** [realWidthCurve]'s width at zoom [z], in dp. */
+private fun realWidthDp(base: FloatArray, realM: Double, capDp: Double, z: Double): Double {
+    val m = realM * roadWidthScale()
+    return maxOf(expInterp(base, z, 1.5), if (m > 0) minOf(capDp, m / (M_PER_DP_Z0 / Math.pow(2.0, z))) else 0.0)
 }
 
 /** Street-name spacing by zoom (2026-10-03, issue #655): [base] px up to z16, widening to

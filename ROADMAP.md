@@ -422,8 +422,11 @@ off the list when it has been.
   change before a corner. Not seen on a phone: a fork found past its point, a lane change
   smoothed out, a roundabout exit, the switch under Navigation turning them off mid-drive, or
   the car screen, which has none.
-- Turn arrows cut from the drawn line (reports of arrows beside the line): unit tests for the
-  drawn line and a curve. Not seen: a Google route whose drawn line was moved to the road center.
+- Turn arrows cut from the drawn line and redrawn inside it (round tail, plain head, thin indigo
+  edge; reports of arrows beside the line and a head that read as stuck on): seen on a 4a in a
+  simulated drive, a paused right turn with the arrow inside the line and no seam at the head;
+  unit tests for the drawn line and a curve. Not seen: a Google route whose drawn line was moved
+  to the road center, a tight curve on a ramp, or z18 on a phone.
 - The car's speed badge and limit sign sized with the screen (#817): seen on the desktop head
   unit's 800 by 480 profile in a demo drive, the badge and the sign at the template's button
   size. Not seen: the 1280 by 720 profile with the new sizes, or a real head unit.
