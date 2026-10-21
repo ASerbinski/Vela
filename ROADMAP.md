@@ -517,6 +517,8 @@ off the list when it has been.
   behind the car): a unit test of the two rules. Not driven.
 - A recheck's heal no longer starts the reroute cooldown (it held a needed reroute 8 s): code
   only. Not driven.
+- A reroute's naming snap starts the way the car points and skips vias on Google's own start
+  (an unpinned one went round a block): a unit test of the vias. Not driven.
 
 ### Open from the October 2026 audit
 

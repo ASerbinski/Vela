@@ -1694,6 +1694,11 @@ LADDER_SNAP_RESERVE_MS       6_000   an escalated fetch stops waiting for Google
   request is rejected. Planning fetches and stationary fixes send none, and neither does a fix
   under the heading term's speed or accuracy (`NavSession.departCourse`), so a reroute from a
   crawl is not told the car points the way GPS drift says.
+- A reroute that names a provisional Google route (`NavSession.driveable`, `nameRoute`) pins the
+  snap's departure the same way, and leaves out the samples within `VIA_ORIGIN_CLEAR_M` (150 m)
+  of the origin (`RouteGeometry.snapVias`): they sit on Google's own start, which Google chose
+  with no heading. An unpinned snap began a reroute on a cross street, round a block, across the
+  road the car was on.
 - Google's request carries no heading. On a fetch that has one, a Google route whose first 80 m
   run more than 120 degrees off it (`RouteGeometry.startsAgainst`) is set aside when the open
   router answered, so the hybrid cannot tell a moving car to turn around. `forwardChoice`

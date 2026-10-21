@@ -1123,7 +1123,7 @@ class NavSession @Inject constructor(
                 }
                     .getOrNull()?.let { routes ->
                         val left = attempt.timeoutMs - (SystemClock.elapsedRealtime() - now) - REROUTE_NAME_SLACK_MS
-                        driveable(routes, loc, dest, nameWithinMs = left.coerceAtLeast(0L))
+                        driveable(routes, loc, dest, nameWithinMs = left.coerceAtLeast(0L), departBearingDeg = headingDeg)
                     }?.takeIf { it.reaches(dest) }
             }
             val r = kotlinx.coroutines.withTimeoutOrNull(attempt.timeoutMs) { fetch.await() }
@@ -1228,10 +1228,10 @@ class NavSession @Inject constructor(
      * faster-route fence rejects; when the reply also carries a full-stepped open-router route,
      * that one is better guidance than Google's guessed steps, even a little slower.
      */
-    private suspend fun driveable(routes: List<Route>, from: LatLng, dest: LatLng, nameWithinMs: Long? = null): Route? {
+    private suspend fun driveable(routes: List<Route>, from: LatLng, dest: LatLng, nameWithinMs: Long? = null, departBearingDeg: Double? = null): Route? {
         val top = routes.firstOrNull() ?: return null
         if (top.drivable) return top
-        suspend fun name(): Route? = runCatching { dataSource.nameRoute(top, from, dest, mode, RoutingPrefs.avoidTolls, RoutingPrefs.avoidHighways, RoutingPrefs.avoidFerries) }.getOrNull()
+        suspend fun name(): Route? = runCatching { dataSource.nameRoute(top, from, dest, mode, RoutingPrefs.avoidTolls, RoutingPrefs.avoidHighways, RoutingPrefs.avoidFerries, departBearingDeg) }.getOrNull()
         // A reroute names inside what is left of its deadline (issue #557): naming is an open-router
         // snap, the very call that may be hanging. Past the budget the full-stepped open-router
         // route from the same reply below is used instead. Unstructured for the usual reason: a

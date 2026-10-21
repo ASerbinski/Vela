@@ -1217,6 +1217,19 @@ object RouteGeometry {
     private const val SPUR_END_SLACK_M = 300.0      // origin/destination approaches may differ from the course
     private const val SPUR_LOCAL_M = 200.0          // beyond this from the windowed match, search the whole course
 
+    /**
+     * The vias that snap the open router onto [poly] from [origin] (the naming of a provisional
+     * Google route). With a departure heading, a sample within [VIA_ORIGIN_CLEAR_M] of the origin
+     * is left out: it sits on Google's own start, which Google picked with no heading, and it held
+     * a reroute's snap to it. On a real drive the snap began on a cross street, went round a block
+     * and crossed the road the car was on.
+     */
+    internal fun snapVias(poly: List<LatLng>, origin: LatLng, departBearingDeg: Double?): List<LatLng> =
+        sampleVias(poly).let { v -> if (departBearingDeg == null) v else v.filter { it.distanceTo(origin) >= VIA_ORIGIN_CLEAR_M } }
+
+    /** See [snapVias]. */
+    const val VIA_ORIGIN_CLEAR_M = 150.0
+
     internal fun sampleVias(poly: List<LatLng>, count: Int = 12): List<LatLng> {
         if (poly.size < 3) return emptyList() // need at least one interior point
         val interior = poly.size - 2

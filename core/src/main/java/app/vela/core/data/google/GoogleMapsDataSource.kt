@@ -1905,21 +1905,23 @@ class GoogleMapsDataSource @Inject constructor(
      *  through OSRM for real named turn-by-turn, guarded to reach the destination, and re-apply Google's
      *  live-traffic overlay. Failure keeps Google's own (abbreviated) steps so nav still works.
      *  (An on-device map-match for downloaded regions could plug in here next.) */
-    override suspend fun nameRoute(route: Route, origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean): Route {
-        val named = nameRoutePlain(route, origin, destination, mode, avoidTolls, avoidHighways, avoidFerries)
+    override suspend fun nameRoute(route: Route, origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean, departBearingDeg: Double?): Route {
+        val named = nameRoutePlain(route, origin, destination, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg)
         return if (mode == TravelMode.DRIVE) io { withLotTurn(named, urgent = false) } else named
     }
 
-    private suspend fun nameRoutePlain(route: Route, origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean): Route = io {
+    private suspend fun nameRoutePlain(route: Route, origin: LatLng, destination: LatLng, mode: TravelMode, avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean, departBearingDeg: Double?): Route = io {
         if (!route.provisional || route.polyline.size < 3) return@io route.copy(provisional = false)
-        val vias = listOf(origin) + RouteGeometry.sampleVias(route.polyline) + destination
+        // A reroute's heading pins where the snap starts, and the samples on Google's own unheaded
+        // start are left out (RouteGeometry.snapVias).
+        val vias = listOf(origin) + RouteGeometry.snapVias(route.polyline, origin, departBearingDeg) + destination
         // The avoid flags ride along on the snap, but they add nothing on the public server:
         // OSRM_SUPPORTS_EXCLUDE is off, so no `exclude=` is sent and the vias alone hold the
         // snap to Google's chosen path.
         // The traffic snap's guards (issue #478): a sampled point that lands on a flyover deck, the
         // far carriageway or a dead-end lane forces an out-and-back or a loop, so the snap must reach
         // the destination, stay within SNAP_LENGTH_SLACK of the route it names, and carry no spur.
-        val named = RouteGeometry.routeVia(http, vias, mode, avoidTolls, avoidHighways, avoidFerries, strictVias = true).firstOrNull()
+        val named = RouteGeometry.routeVia(http, vias, mode, avoidTolls, avoidHighways, avoidFerries, departBearingDeg = departBearingDeg, strictVias = true).firstOrNull()
             ?.takeIf { it.polyline.lastOrNull()?.let { p -> p.distanceTo(destination) <= SNAP_REACH_M } == true }
             ?.takeIf { it.distanceMeters <= route.distanceMeters * SNAP_LENGTH_SLACK + SNAP_LENGTH_SLACK_M }
             ?.takeIf { !spurWithTurn(it, route.polyline) }
