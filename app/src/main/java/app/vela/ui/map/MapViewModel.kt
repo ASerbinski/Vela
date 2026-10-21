@@ -1109,6 +1109,8 @@ class MapViewModel @Inject constructor(
                         // Course for the engine's heading-vs-route off-route term and the
                         // reroute's departure heading. Fresh only: stopped = null.
                         bearingDeg = fixBearing?.toDouble(),
+                        // An outlier hold steers with the last good position; it never starts a recheck.
+                        fromFix = here == rawHere,
                     )
                     nav.lastNavFedMs = nowMs
                     nav.recordDriveFix(here)

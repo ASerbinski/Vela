@@ -1724,7 +1724,13 @@ MIN_PLAUSIBLE_ETA_FRACTION       0.4   a candidate under this share of the time 
 
 A recheck fetches from the current position through the remaining stops. It does not run off
 route, in a replay, with an offer on screen, or with "Live traffic re-checks" off (pref
-`nav_live_rechecks`, `NavSession.liveRechecks`). A degraded route (`RouteHeal.degraded`) is one
+`nav_live_rechecks`, `NavSession.liveRechecks`). It starts only from a fix that is the phone's
+own position (`onLocation`'s `fromFix`: not a dead-reckoned point, not an outlier hold), rated
+`RECHECK_MAX_ACC_M` (30 m) or better, with no off-route hits counted (`recheckFrom`). What it
+brings back is dropped unless the last such fix, at most `TRUSTED_FIX_MAX_AGE_MS` (5 s) old, lies
+within `CAR_ON_CANDIDATE_M` (50 m) of the candidate's first km (`startsAtCar`). A real drive
+downtown had dead reckoning carry the puck down a reroute's line the car had not taken, and a
+recheck from there swapped in a route 185 m behind the car. A degraded route (`RouteHeal.degraded`) is one
 with abbreviated steps, no live traffic, or street names that fell short (`Route.namesShort`).
 
 - Same course, with traffic: the shown arrival time is recalibrated. `etaScale` is multiplied by

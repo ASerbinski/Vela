@@ -100,6 +100,9 @@ class NavSession @Inject constructor(
      *  route, and auto-resume needs somewhere to measure from. */
     @Volatile private var lastLoc: LatLng? = null
     @Volatile private var lastBearing: Double? = null
+    /** The last fix that was the phone's own position and good enough to fetch from, and when. */
+    @Volatile private var lastTrustedFix: LatLng? = null
+    @Volatile private var lastTrustedFixMs = 0L
     /** Consecutive paused fixes that are moving AND back on the route (see [maybeAutoResume]). */
     private var backOnRouteHits = 0
     /** Auto-resume is ARMED only once the stop has actually happened - a fix that is stationary or
@@ -438,7 +441,12 @@ class NavSession @Inject constructor(
         }
     }
 
-    fun onLocation(loc: LatLng, imperial: Boolean = false, speedMps: Double? = null, accuracyM: Double? = null, bearingDeg: Double? = null) {
+    fun onLocation(
+        loc: LatLng, imperial: Boolean = false, speedMps: Double? = null, accuracyM: Double? = null, bearingDeg: Double? = null,
+        // False when [loc] is not this fix's own position: a dead-reckoned point, or the last good
+        // position an outlier hold kept. Such a point steers the drive but never starts a recheck.
+        fromFix: Boolean = true,
+    ) {
         val s = _state.value
         val route = s.route ?: return
         if (!s.navigating || s.arrived) return
@@ -447,6 +455,8 @@ class NavSession @Inject constructor(
         // and arrive, and they are all downstream of this call.
         lastLoc = loc
         lastBearing = departCourse(bearingDeg, speedMps, accuracyM)
+        val trusted = fromFix && (accuracyM == null || accuracyM <= RECHECK_MAX_ACC_M)
+        if (trusted) { lastTrustedFix = loc; lastTrustedFixMs = SystemClock.elapsedRealtime() }
         if (s.paused) {
             // Whatever is driven during the hold was driven: the first fix after it is not a jump.
             synchronized(stopLock) { progressRoute = null }
@@ -565,7 +575,9 @@ class NavSession @Inject constructor(
         }
         if (!skipped && interrupting) announceStopsPassed(route, next.traveledM, loc)
         if (_state.value.navigating) prewarmPrompts(route, next, speedMps ?: 0.0, imperial, spokeNow)
-        maybeRecheck(loc, next)
+        // A recheck starts from where the phone is, never from a dead-reckoned or held point, a
+        // poor fix, or a fix the engine is already counting as off the line ([recheckFrom]).
+        if (recheckFrom(trusted, next.offRouteHits)) maybeRecheck(loc, next)
     }
 
     /** The next stop as the engine needs it for its approach cue: its mark, its name, which side
@@ -859,6 +871,14 @@ class NavSession @Inject constructor(
             // the new scale independent of the old one (remaining already carries etaScale), and
             // the offer logic below then compares candidates against a LIVE baseline too.
             val current = _state.value.route ?: return@launch
+            // The car has to be on what came back: a recheck fetched while the puck was carried
+            // down a line the car had left landed a route 185 m behind it (a real drive downtown,
+            // where poor fixes left the drive on dead reckoning).
+            val car = lastTrustedFix?.takeIf { SystemClock.elapsedRealtime() - lastTrustedFixMs <= TRUSTED_FIX_MAX_AGE_MS }
+            if (car == null || !startsAtCar(candidate.polyline, car)) {
+                note("recheck: dropped, the car is not on the candidate")
+                return@launch
+            }
             val sameCourse = candidateEta > 0.0 &&
                 !app.vela.core.data.RouteGeometry.divergent(current, candidate, SAME_COURSE_M)
             if (sameCourse && remaining > 120.0 && trafficAware) {
@@ -1252,6 +1272,26 @@ class NavSession @Inject constructor(
         // for miles, and calibrating our ETA from a route we are not driving would lie.
         const val SAME_COURSE_M = 250.0
         const val MIN_RECHECK_DISTANCE_M = 1_500.0 // don't bother near the destination
+        /** A recheck starts only from a fix rated this good or better. */
+        const val RECHECK_MAX_ACC_M = 30.0
+        /** What a recheck brings back is taken only when the last trusted fix is this recent... */
+        const val TRUSTED_FIX_MAX_AGE_MS = 5_000L
+        /** ...and within this of the candidate's line, in its first [CAR_ON_CANDIDATE_ALONG_M]. */
+        const val CAR_ON_CANDIDATE_M = 50.0
+        const val CAR_ON_CANDIDATE_ALONG_M = 1_000.0
+
+        /** May this fix start a recheck: the phone's own position, good enough ([RECHECK_MAX_ACC_M]),
+         *  and not already counted as off the line. */
+        fun recheckFrom(trustedFix: Boolean, offRouteHits: Int): Boolean = trustedFix && offRouteHits == 0
+
+        /** Whether [car] is on [line] near its start: a route a recheck brings back has to begin
+         *  where the car is, not where a dead-reckoned or held position put it. */
+        fun startsAtCar(line: List<LatLng>, car: LatLng): Boolean {
+            if (line.size < 2) return false
+            val cum = RouteProjection.cumulative(line)
+            val (_, perp) = NavEngine.projectAlong(line, cum, car, 0.0, CAR_ON_CANDIDATE_ALONG_M)
+            return perp <= CAR_ON_CANDIDATE_M
+        }
         const val FASTER_THRESHOLD_S = 90.0        // only offer if it saves real time
         const val FASTER_CHIME_LEAD_MS = 450L       // the faster-route chime, then the spoken offer
         const val REROUTE_COOLDOWN_MS = 10_000L    // min gap between ADOPTED reroutes (no reroute storms)

@@ -998,7 +998,7 @@ internal class NavController(
                 )
             }
             host.restartStaleTimer() // keep the dot/arrow blue while the estimate runs
-            navSession.onLocation(pt, app.vela.ui.Units.imperial.value, drSpeed)
+            navSession.onLocation(pt, app.vela.ui.Units.imperial.value, drSpeed, fromFix = false)
         }
     }
 
